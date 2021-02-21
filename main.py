@@ -5,6 +5,11 @@ app = FastAPI()
 
 
 def city_dict_serializer(city_params: list) -> dict:
+    """
+    Сериализация списка параметров в словарь.
+    :param city_params: список значений у города
+    :return:
+    """
     city_dict = {'geonameid': int(city_params[0]),
                  'name': city_params[1],
                  'asciiname': city_params[2],
@@ -28,6 +33,7 @@ def city_dict_serializer(city_params: list) -> dict:
 
 
 with open('RU.txt', 'r', encoding='utf-8') as file:
+    # Обрабатывает все строчки и добавляет их в список
     cities_list = []
     for line in file:
         serialized_city = city_dict_serializer(line.split('\t'))
@@ -35,6 +41,11 @@ with open('RU.txt', 'r', encoding='utf-8') as file:
 
 
 def find_city_by_id(geoname_id: int):
+    """
+    Ищет город по айди через бинарных поиск
+    :param geoname_id: айди geoname объекта
+    :return: dict объект города или None
+    """
     first = 0
     last = len(cities_list)
 
@@ -51,6 +62,11 @@ def find_city_by_id(geoname_id: int):
 
 
 def find_city_by_name(city_name: str):
+    """
+    Ищет город в списке по названию
+    :param city_name: Название города на русском
+    :return: dict объект города или None
+    """
     cities_by_name = []
 
     for city in cities_list:
@@ -67,12 +83,28 @@ def find_city_by_name(city_name: str):
 
 @app.get("/city_info")
 async def city_info(geoname_id: int):
+    """
+    Возвращает город по айди
+    :param geoname_id:
+    :return:
+    """
     city_dict = find_city_by_id(geoname_id)
+    if not city_dict:
+        raise HTTPException(
+            status_code=404,
+            detail="City not found"
+        )
     return city_dict
 
 
 @app.get("/cities_page")
 async def cities_page(page: int, page_size: int):
+    """
+    Возвращает список городов при заданных параметрах
+    :param page: номер страницы
+    :param page_size: размер страницы
+    :return:
+    """
     page_from = (page - 1) * page_size
     page_to = page * page_size
 
@@ -82,6 +114,18 @@ async def cities_page(page: int, page_size: int):
 
 @app.get("/compare_cities")
 async def compare_cities(city_1: str, city_2: str):
+    """
+    Сравнивает два города по названиям
+    :param city_1: название первого города
+    :param city_2: название второго города
+    :return: {
+              "city_1": {json объект города},
+              "city_2": {json объект города},
+              "northern": "city_name",
+              "same_timezone": false,
+              "time_difference": 1
+            }
+    """
     city_1 = find_city_by_name(city_1)
     city_2 = find_city_by_name(city_2)
     if not city_1 or not city_2:
@@ -95,14 +139,17 @@ async def compare_cities(city_1: str, city_2: str):
         'city_2': city_2
     }
 
+    # Сравнивает широту, чтобы определить какой из двух городов севернее
     if city_1.get('latitude') > city_2.get('latitude'):
         result.update({'northern': city_1.get('name')})
     else:
         result.update({'northern': city_2.get('name')})
 
     if city_1.get('timezone') == city_2.get('timezone'):
+        # Таймзона совпала
         result.update({'same_timezone': True, 'time_difference': 0})
     else:
+        # Таймзона не совпала. Через библиотеку pendulum получаем время в первой и второй таймзоны, получаем разницу
         city_1_time = pendulum.now(city_1.get('timezone'))
         city_2_time = city_1_time.in_timezone(city_2.get('timezone'))
         difference = abs(city_1_time.hour - city_2_time.hour)
